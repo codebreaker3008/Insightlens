@@ -1,3 +1,8 @@
+/**
+ * Community discussions data source — uses Hacker News (Algolia API).
+ * Reddit blocks Replit's egress IPs (403), so HN is used as the
+ * primary community discussion source.
+ */
 import { logger } from "./logger";
 
 export interface RedditPost {
@@ -21,24 +26,29 @@ export interface RedditComment {
   permalink: string;
 }
 
-const REDDIT_BASE = "https://www.reddit.com";
-const SEARCH_VARIATIONS = [
-  "{query}",
-  "{query} review",
-  "{query} experience",
-  "{query} complaint",
-  "{query} issue",
-  "{query} alternative",
-  "{query} vs",
-];
+const HN_BASE = "https://hn.algolia.com/api/v1";
+const ONE_YEAR_AGO = Math.floor(Date.now() / 1000) - 365 * 24 * 60 * 60;
+
+interface HNHit {
+  objectID: string;
+  title?: string;
+  story_text?: string;
+  comment_text?: string;
+  url?: string;
+  author?: string;
+  created_at_i?: number;
+  points?: number;
+  num_comments?: number;
+  story_id?: number;
+  story_title?: string;
+  story_url?: string;
+}
 
 async function fetchJson<T>(url: string): Promise<T | null> {
   try {
     const res = await fetch(url, {
-      headers: {
-        "User-Agent": "SignalOS/1.0 (product intelligence platform)",
-        Accept: "application/json",
-      },
+      headers: { Accept: "application/json" },
+      signal: AbortSignal.timeout(10000),
     });
     if (!res.ok) return null;
     return (await res.json()) as T;
@@ -47,92 +57,112 @@ async function fetchJson<T>(url: string): Promise<T | null> {
   }
 }
 
-async function searchReddit(query: string, limit = 25): Promise<RedditPost[]> {
+async function searchHN(query: string, tags: string, hitsPerPage = 30): Promise<HNHit[]> {
   const encoded = encodeURIComponent(query);
-  const url = `${REDDIT_BASE}/search.json?q=${encoded}&type=link&limit=${limit}&sort=relevance&t=year`;
-
-  const data = await fetchJson<{
-    data: { children: { data: Record<string, unknown> }[] };
-  }>(url);
-
-  if (!data?.data?.children) return [];
-
-  return data.data.children.map((child) => {
-    const d = child.data;
-    return {
-      id: String(d.id ?? ""),
-      title: String(d.title ?? ""),
-      selftext: String(d.selftext ?? ""),
-      url: String(d.url ?? ""),
-      permalink: `${REDDIT_BASE}${d.permalink ?? ""}`,
-      subreddit: String(d.subreddit ?? ""),
-      score: Number(d.score ?? 0),
-      created_utc: Number(d.created_utc ?? 0),
-      num_comments: Number(d.num_comments ?? 0),
-      comments: [],
-    };
-  });
+  const url = `${HN_BASE}/search?query=${encoded}&tags=${tags}&hitsPerPage=${hitsPerPage}&numericFilters=created_at_i%3E${ONE_YEAR_AGO}`;
+  const data = await fetchJson<{ hits: HNHit[] }>(url);
+  return data?.hits ?? [];
 }
 
-async function fetchComments(permalink: string): Promise<RedditComment[]> {
-  const url = `${permalink.replace(/\/$/, "")}.json?limit=50&sort=top&depth=1`;
-  const data = await fetchJson<unknown[]>(url);
-
-  if (!Array.isArray(data) || data.length < 2) return [];
-
-  const commentTree = (
-    data[1] as { data: { children: { data: Record<string, unknown>; kind: string }[] } }
-  ).data?.children;
-  if (!Array.isArray(commentTree)) return [];
-
-  return commentTree
-    .filter((c) => c.kind === "t1" && c.data.body && c.data.body !== "[deleted]")
-    .slice(0, 10)
-    .map((c) => ({
-      id: String(c.data.id ?? ""),
-      body: String(c.data.body ?? ""),
-      score: Number(c.data.score ?? 0),
-      created_utc: Number(c.data.created_utc ?? 0),
-      permalink: `${REDDIT_BASE}${c.data.permalink ?? ""}`,
-    }));
+async function searchHNAll(query: string, hitsPerPage = 30): Promise<HNHit[]> {
+  const encoded = encodeURIComponent(query);
+  const url = `${HN_BASE}/search?query=${encoded}&hitsPerPage=${hitsPerPage}&numericFilters=created_at_i%3E${ONE_YEAR_AGO}`;
+  const data = await fetchJson<{ hits: HNHit[] }>(url);
+  return data?.hits ?? [];
 }
 
 export async function collectRedditData(query: string): Promise<RedditPost[]> {
-  logger.info({ query }, "Collecting Reddit data");
+  logger.info({ query }, "Collecting community discussion data (Hacker News)");
 
-  const allPosts: RedditPost[] = [];
-  const seenIds = new Set<string>();
+  const searchTerms = [query, `${query} review`, `${query} experience`, `${query} alternative`];
 
-  const searchTerms = SEARCH_VARIATIONS.map((v) =>
-    v.replace("{query}", query),
-  ).slice(0, 4);
+  const [stories, comments, ...moreResults] = await Promise.all([
+    searchHN(query, "story", 30),
+    searchHN(query, "comment", 50),
+    ...searchTerms.slice(1).map((term) => searchHNAll(term, 15)),
+  ]);
 
-  const searchResults = await Promise.all(
-    searchTerms.map((term) => searchReddit(term, 20)),
-  );
+  const allHits: HNHit[] = [...(stories ?? []), ...(comments ?? [])];
+  for (const hits of moreResults) allHits.push(...hits);
 
-  for (const posts of searchResults) {
-    for (const post of posts) {
-      if (!seenIds.has(post.id)) {
-        seenIds.add(post.id);
-        allPosts.push(post);
-      }
+  // Deduplicate by objectID
+  const seen = new Set<string>();
+  const unique = allHits.filter((h) => {
+    if (seen.has(h.objectID)) return false;
+    seen.add(h.objectID);
+    return true;
+  });
+
+  // Convert stories into RedditPost format
+  const storyHits = unique.filter((h) => h.title || h.story_text);
+  const commentHits = unique.filter((h) => h.comment_text && !h.title);
+
+  // Group comments under their parent story
+  const storyMap = new Map<string, RedditPost>();
+
+  for (const hit of storyHits) {
+    const text = hit.story_text ?? "";
+    if (!hit.title && text.length < 20) continue;
+
+    const post: RedditPost = {
+      id: hit.objectID,
+      title: hit.title ?? "(no title)",
+      selftext: text,
+      url: hit.url ?? `https://news.ycombinator.com/item?id=${hit.objectID}`,
+      permalink: `https://news.ycombinator.com/item?id=${hit.objectID}`,
+      subreddit: "HackerNews",
+      score: hit.points ?? 0,
+      created_utc: hit.created_at_i ?? 0,
+      num_comments: hit.num_comments ?? 0,
+      comments: [],
+    };
+    storyMap.set(hit.objectID, post);
+  }
+
+  // Create a catch-all post for orphaned comments
+  const orphanPost: RedditPost = {
+    id: `hn-comments-${query}`,
+    title: `HN community discussion: ${query}`,
+    selftext: "",
+    url: `https://news.ycombinator.com/search?q=${encodeURIComponent(query)}`,
+    permalink: `https://news.ycombinator.com/search?q=${encodeURIComponent(query)}`,
+    subreddit: "HackerNews",
+    score: 0,
+    created_utc: Date.now() / 1000,
+    num_comments: commentHits.length,
+    comments: [],
+  };
+
+  for (const hit of commentHits) {
+    const body = hit.comment_text ?? "";
+    if (body.length < 20) continue;
+
+    const comment: RedditComment = {
+      id: hit.objectID,
+      body: body.replace(/<[^>]+>/g, " ").trim(), // strip HTML tags
+      score: hit.points ?? 0,
+      created_utc: hit.created_at_i ?? 0,
+      permalink: `https://news.ycombinator.com/item?id=${hit.objectID}`,
+    };
+
+    // Try to attach to parent story, otherwise go to orphan post
+    const storyId = String(hit.story_id ?? "");
+    const parent = storyMap.get(storyId);
+    if (parent) {
+      parent.comments.push(comment);
+    } else {
+      orphanPost.comments.push(comment);
     }
   }
 
-  logger.info({ count: allPosts.length }, "Found Reddit posts, fetching comments");
+  const posts = [...storyMap.values()];
+  if (orphanPost.comments.length > 0) posts.push(orphanPost);
 
-  const topPosts = allPosts
-    .filter((p) => p.num_comments > 0)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 20);
+  logger.info({
+    stories: storyMap.size,
+    orphanComments: orphanPost.comments.length,
+    total: posts.length,
+  }, "HN data collected");
 
-  await Promise.all(
-    topPosts.map(async (post) => {
-      post.comments = await fetchComments(post.permalink);
-    }),
-  );
-
-  logger.info({ posts: allPosts.length }, "Reddit data collected");
-  return allPosts;
+  return posts;
 }

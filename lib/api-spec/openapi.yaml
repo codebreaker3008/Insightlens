@@ -158,7 +158,7 @@ components:
           type: string
         source:
           type: string
-          description: reddit or playstore
+          description: community (Hacker News) or playstore
         url:
           type: ["string", "null"]
         date:

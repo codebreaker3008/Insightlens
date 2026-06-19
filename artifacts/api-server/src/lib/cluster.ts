@@ -3,7 +3,7 @@ import type { PlayStoreApp } from "./playstore";
 
 export interface FeedbackItem {
   text: string;
-  source: "reddit" | "playstore";
+  source: "community" | "playstore";
   url: string | null;
   date: string | null;
   subreddit: string | null;
@@ -47,7 +47,7 @@ export function normalizeFeedback(
       seenTexts.add(key);
       items.push({
         text: text.slice(0, 1000),
-        source: "reddit",
+        source: "community",
         url: post.permalink,
         date: extractDate(post.created_utc),
         subreddit: post.subreddit,
@@ -63,7 +63,7 @@ export function normalizeFeedback(
       seenTexts.add(key);
       items.push({
         text: comment.body.slice(0, 1000),
-        source: "reddit",
+        source: "community",
         url: comment.permalink,
         date: extractDate(comment.created_utc),
         subreddit: post.subreddit,
@@ -141,7 +141,7 @@ export function clusterFeedback(items: FeedbackItem[]): string {
     arr
       .sort((a, b) => b.score - a.score)
       .slice(0, n)
-      .map((i) => `- [${i.source}${i.rating ? ` ★${i.rating}` : ""}] ${i.text.slice(0, 200)}`)
+      .map((i) => `- [${i.source}${i.rating ? ` ★${i.rating}` : ""}] ${i.text.slice(0, 300)}`)
       .join("\n");
 
   return `FEEDBACK SUMMARY FOR AI ANALYSIS

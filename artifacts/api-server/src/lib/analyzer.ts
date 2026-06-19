@@ -4,7 +4,7 @@ import { logger } from "./logger";
 
 export interface EvidenceItem {
   text: string;
-  source: "reddit" | "playstore";
+  source: "community" | "playstore";
   url: string | null;
   date: string | null;
   subreddit: string | null;
@@ -196,8 +196,15 @@ Respond with ONLY valid JSON matching this exact structure:
 Important: sentiment must sum to 100. Include 3-8 items per section where data supports it. Be specific — use product-specific language, not generic observations.`;
 
   const responseText = await chatWithFallback(
-    [{ role: "user", content: prompt }],
-    { temperature: 0.2, maxTokens: 8192 },
+    [
+      {
+        role: "system",
+        content:
+          "You are a product intelligence analyst. You MUST respond with ONLY valid JSON — no markdown fences, no prose, no thinking tags, no commentary. Start your response with '{' and end it with '}'.",
+      },
+      { role: "user", content: prompt },
+    ],
+    { temperature: 0.2, maxTokens: 8192, jsonMode: true },
   );
 
   logger.info("AI response received, parsing");

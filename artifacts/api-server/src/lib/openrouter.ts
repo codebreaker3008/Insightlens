@@ -20,25 +20,40 @@ export const MODELS = [
   "google/gemini-2.5-flash",
 ] as const;
 
+function stripThinkingTags(text: string): string {
+  // Remove <think>...</think> blocks emitted by reasoning models (Qwen3, DeepSeek R1, etc.)
+  return text
+    .replace(/<think>[\s\S]*?<\/think>/gi, "")
+    .replace(/<thinking>[\s\S]*?<\/thinking>/gi, "")
+    .trim();
+}
+
 export async function chatWithFallback(
   messages: OpenAI.Chat.ChatCompletionMessageParam[],
-  options: { temperature?: number; maxTokens?: number } = {},
+  options: { temperature?: number; maxTokens?: number; jsonMode?: boolean } = {},
 ): Promise<string> {
   const errors: string[] = [];
 
   for (const model of MODELS) {
     try {
-      const response = await openrouter.chat.completions.create({
+      const createOptions: OpenAI.Chat.ChatCompletionCreateParamsNonStreaming = {
         model,
         messages,
         temperature: options.temperature ?? 0.3,
         max_tokens: options.maxTokens ?? 8192,
-      });
+      };
 
-      const content = response.choices[0]?.message?.content;
-      if (!content) throw new Error("Empty response from model");
+      // Enable JSON mode for models that support it
+      if (options.jsonMode) {
+        createOptions.response_format = { type: "json_object" };
+      }
 
-      return content;
+      const response = await openrouter.chat.completions.create(createOptions);
+
+      const raw = response.choices[0]?.message?.content;
+      if (!raw) throw new Error("Empty response from model");
+
+      return stripThinkingTags(raw);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       errors.push(`${model}: ${msg}`);
