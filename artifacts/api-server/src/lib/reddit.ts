@@ -1,7 +1,7 @@
 /**
- * Community discussions data source — uses Hacker News (Algolia API).
- * Reddit blocks Replit's egress IPs (403), so HN is used as the
- * primary community discussion source.
+ * Reddit data source — uses Arctic Shift (photon-reddit.com) which provides
+ * Reddit post/comment archives via a public API. We search product subreddits
+ * (e.g. r/spotify for "Spotify") to get real Reddit discussions.
  */
 import { logger } from "./logger";
 
@@ -26,128 +26,138 @@ export interface RedditComment {
   permalink: string;
 }
 
-const HN_BASE = "https://hn.algolia.com/api/v1";
-const ONE_YEAR_AGO = Math.floor(Date.now() / 1000) - 365 * 24 * 60 * 60;
+const ARCTIC_BASE = "https://arctic-shift.photon-reddit.com/api";
+const REDDIT_BASE = "https://www.reddit.com";
 
-interface HNHit {
-  objectID: string;
+interface ArcticPost {
+  id: string;
   title?: string;
-  story_text?: string;
-  comment_text?: string;
+  selftext?: string;
   url?: string;
-  author?: string;
-  created_at_i?: number;
-  points?: number;
+  permalink?: string;
+  subreddit?: string;
+  score?: number;
+  created_utc?: number;
   num_comments?: number;
-  story_id?: number;
-  story_title?: string;
-  story_url?: string;
+}
+
+interface ArcticComment {
+  id: string;
+  body?: string;
+  score?: number;
+  created_utc?: number;
+  permalink?: string;
+  link_id?: string;
 }
 
 async function fetchJson<T>(url: string): Promise<T | null> {
   try {
     const res = await fetch(url, {
       headers: { Accept: "application/json" },
-      signal: AbortSignal.timeout(10000),
+      signal: AbortSignal.timeout(12000),
     });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      logger.debug({ url, status: res.status }, "Arctic Shift fetch failed");
+      return null;
+    }
     return (await res.json()) as T;
-  } catch {
+  } catch (err) {
+    logger.debug({ url, err }, "Arctic Shift fetch error");
     return null;
   }
 }
 
-async function searchHN(query: string, tags: string, hitsPerPage = 30): Promise<HNHit[]> {
-  const encoded = encodeURIComponent(query);
-  const url = `${HN_BASE}/search?query=${encoded}&tags=${tags}&hitsPerPage=${hitsPerPage}&numericFilters=created_at_i%3E${ONE_YEAR_AGO}`;
-  const data = await fetchJson<{ hits: HNHit[] }>(url);
-  return data?.hits ?? [];
+function toSubredditName(query: string): string {
+  return query.toLowerCase().replace(/\s+/g, "").replace(/[^a-z0-9_]/g, "");
 }
 
-async function searchHNAll(query: string, hitsPerPage = 30): Promise<HNHit[]> {
-  const encoded = encodeURIComponent(query);
-  const url = `${HN_BASE}/search?query=${encoded}&hitsPerPage=${hitsPerPage}&numericFilters=created_at_i%3E${ONE_YEAR_AGO}`;
-  const data = await fetchJson<{ hits: HNHit[] }>(url);
-  return data?.hits ?? [];
+async function fetchSubredditPosts(subreddit: string, limit = 100): Promise<ArcticPost[]> {
+  const url = `${ARCTIC_BASE}/posts/search?subreddit=${subreddit}&limit=${limit}`;
+  const data = await fetchJson<{ data: ArcticPost[] }>(url);
+  return data?.data ?? [];
+}
+
+async function fetchSubredditComments(subreddit: string, limit = 200): Promise<ArcticComment[]> {
+  const url = `${ARCTIC_BASE}/comments/search?subreddit=${subreddit}&limit=${limit}`;
+  const data = await fetchJson<{ data: ArcticComment[] }>(url);
+  return data?.data ?? [];
 }
 
 export async function collectRedditData(query: string): Promise<RedditPost[]> {
-  logger.info({ query }, "Collecting community discussion data (Hacker News)");
+  logger.info({ query }, "Collecting Reddit data via Arctic Shift");
 
-  const searchTerms = [query, `${query} review`, `${query} experience`, `${query} alternative`];
+  const base = toSubredditName(query);
+  // Try the main subreddit name and common variants (e.g. r/spotify, r/notionapp, r/uberdrivers)
+  const candidates = [base, `${base}app`, `${base}official`, `${base}mobile`];
 
-  const [stories, comments, ...moreResults] = await Promise.all([
-    searchHN(query, "story", 30),
-    searchHN(query, "comment", 50),
-    ...searchTerms.slice(1).map((term) => searchHNAll(term, 15)),
-  ]);
+  // Try each candidate subreddit and use the first that returns posts
+  let posts: ArcticPost[] = [];
+  let comments: ArcticComment[] = [];
+  let foundSubreddit = "";
 
-  const allHits: HNHit[] = [...(stories ?? []), ...(comments ?? [])];
-  for (const hits of moreResults) allHits.push(...hits);
-
-  // Deduplicate by objectID
-  const seen = new Set<string>();
-  const unique = allHits.filter((h) => {
-    if (seen.has(h.objectID)) return false;
-    seen.add(h.objectID);
-    return true;
-  });
-
-  // Convert stories into RedditPost format
-  const storyHits = unique.filter((h) => h.title || h.story_text);
-  const commentHits = unique.filter((h) => h.comment_text && !h.title);
-
-  // Group comments under their parent story
-  const storyMap = new Map<string, RedditPost>();
-
-  for (const hit of storyHits) {
-    const text = hit.story_text ?? "";
-    if (!hit.title && text.length < 20) continue;
-
-    const post: RedditPost = {
-      id: hit.objectID,
-      title: hit.title ?? "(no title)",
-      selftext: text,
-      url: hit.url ?? `https://news.ycombinator.com/item?id=${hit.objectID}`,
-      permalink: `https://news.ycombinator.com/item?id=${hit.objectID}`,
-      subreddit: "HackerNews",
-      score: hit.points ?? 0,
-      created_utc: hit.created_at_i ?? 0,
-      num_comments: hit.num_comments ?? 0,
-      comments: [],
-    };
-    storyMap.set(hit.objectID, post);
+  for (const sub of candidates) {
+    const [p, c] = await Promise.all([
+      fetchSubredditPosts(sub, 100),
+      fetchSubredditComments(sub, 200),
+    ]);
+    if (p.length > 0 || c.length > 0) {
+      posts = p;
+      comments = c;
+      foundSubreddit = sub;
+      logger.info({ subreddit: sub, posts: p.length, comments: c.length }, "Found Reddit subreddit");
+      break;
+    }
   }
 
-  // Create a catch-all post for orphaned comments
+  if (posts.length === 0 && comments.length === 0) {
+    logger.warn({ query, candidates }, "No Reddit subreddit found via Arctic Shift");
+    return [];
+  }
+
+  // Build a map of posts
+  const postMap = new Map<string, RedditPost>();
+  for (const p of posts) {
+    if (!p.id) continue;
+    postMap.set(p.id, {
+      id: p.id,
+      title: p.title ?? "",
+      selftext: p.selftext ?? "",
+      url: p.url ?? `${REDDIT_BASE}/r/${foundSubreddit}`,
+      permalink: p.permalink ? `${REDDIT_BASE}${p.permalink}` : `${REDDIT_BASE}/r/${foundSubreddit}/comments/${p.id}`,
+      subreddit: p.subreddit ?? foundSubreddit,
+      score: p.score ?? 0,
+      created_utc: p.created_utc ?? 0,
+      num_comments: p.num_comments ?? 0,
+      comments: [],
+    });
+  }
+
+  // Attach comments to their parent posts
   const orphanPost: RedditPost = {
-    id: `hn-comments-${query}`,
-    title: `HN community discussion: ${query}`,
+    id: `reddit-orphans-${query}`,
+    title: `r/${foundSubreddit} community discussion`,
     selftext: "",
-    url: `https://news.ycombinator.com/search?q=${encodeURIComponent(query)}`,
-    permalink: `https://news.ycombinator.com/search?q=${encodeURIComponent(query)}`,
-    subreddit: "HackerNews",
+    url: `${REDDIT_BASE}/r/${foundSubreddit}`,
+    permalink: `${REDDIT_BASE}/r/${foundSubreddit}`,
+    subreddit: foundSubreddit,
     score: 0,
     created_utc: Date.now() / 1000,
-    num_comments: commentHits.length,
+    num_comments: comments.length,
     comments: [],
   };
 
-  for (const hit of commentHits) {
-    const body = hit.comment_text ?? "";
-    if (body.length < 20) continue;
-
+  for (const c of comments) {
+    if (!c.body || c.body.length < 15 || c.body === "[deleted]" || c.body === "[removed]") continue;
     const comment: RedditComment = {
-      id: hit.objectID,
-      body: body.replace(/<[^>]+>/g, " ").trim(), // strip HTML tags
-      score: hit.points ?? 0,
-      created_utc: hit.created_at_i ?? 0,
-      permalink: `https://news.ycombinator.com/item?id=${hit.objectID}`,
+      id: c.id,
+      body: c.body,
+      score: c.score ?? 0,
+      created_utc: c.created_utc ?? 0,
+      permalink: c.permalink ? `${REDDIT_BASE}${c.permalink}` : `${REDDIT_BASE}/r/${foundSubreddit}`,
     };
-
-    // Try to attach to parent story, otherwise go to orphan post
-    const storyId = String(hit.story_id ?? "");
-    const parent = storyMap.get(storyId);
+    // link_id is "t3_POSTID" format
+    const postId = c.link_id?.replace(/^t3_/, "");
+    const parent = postId ? postMap.get(postId) : undefined;
     if (parent) {
       parent.comments.push(comment);
     } else {
@@ -155,14 +165,15 @@ export async function collectRedditData(query: string): Promise<RedditPost[]> {
     }
   }
 
-  const posts = [...storyMap.values()];
-  if (orphanPost.comments.length > 0) posts.push(orphanPost);
+  const result = [...postMap.values()];
+  if (orphanPost.comments.length > 0) result.push(orphanPost);
 
   logger.info({
-    stories: storyMap.size,
-    orphanComments: orphanPost.comments.length,
-    total: posts.length,
-  }, "HN data collected");
+    subreddit: foundSubreddit,
+    posts: postMap.size,
+    totalComments: comments.length,
+    totalPosts: result.length,
+  }, "Reddit data collected via Arctic Shift");
 
-  return posts;
+  return result;
 }

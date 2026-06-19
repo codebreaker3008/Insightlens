@@ -33,27 +33,48 @@ async function searchPlayStore(query: string): Promise<string[]> {
   }
 }
 
-async function fetchReviews(appId: string, maxReviews = 200): Promise<PlayStoreReview[]> {
+function mapReview(r: Record<string, unknown>): PlayStoreReview {
+  const toDate = (v: unknown) =>
+    v ? new Date(v as string | number | Date).toISOString() : new Date().toISOString();
+  const toNullDate = (v: unknown) =>
+    v ? new Date(v as string | number | Date).toISOString() : null;
+
+  return {
+    id: String((r as { id?: string }).id ?? ""),
+    userName: String(r.userName ?? ""),
+    text: String(r.text ?? ""),
+    score: Number(r.score ?? 0),
+    date: toDate(r.date),
+    thumbsUp: Number(r.thumbsUp ?? 0),
+    replyDate: toNullDate(r.replyDate),
+    replyText: r.replyText ? String(r.replyText) : null,
+  };
+}
+
+async function fetchAllReviews(appId: string, maxTotal = 500): Promise<PlayStoreReview[]> {
   try {
     const gplay = await import("google-play-scraper");
-    const { data } = await gplay.default.reviews({
-      appId,
-      lang: "en",
-      country: "us",
-      sort: 1 as unknown as Parameters<typeof gplay.default.reviews>[0]["sort"],
-      num: maxReviews,
-    });
+    const allReviews: PlayStoreReview[] = [];
+    let nextPaginationToken: string | undefined;
 
-    return data.map((r) => ({
-      id: (r as { id?: string }).id ?? "",
-      userName: r.userName ?? "",
-      text: r.text ?? "",
-      score: r.score ?? 0,
-      date: r.date ? new Date(r.date as unknown as string | number | Date).toISOString() : new Date().toISOString(),
-      thumbsUp: r.thumbsUp ?? 0,
-      replyDate: r.replyDate ? new Date(r.replyDate as unknown as string | number | Date).toISOString() : null,
-      replyText: r.replyText ?? null,
-    }));
+    do {
+      const result = await gplay.default.reviews({
+        appId,
+        lang: "en",
+        country: "us",
+        sort: 1 as unknown as Parameters<typeof gplay.default.reviews>[0]["sort"],
+        num: 300,
+        ...(nextPaginationToken ? { nextPaginationToken } : {}),
+      });
+
+      const batch = (result.data as unknown as Record<string, unknown>[]).map(mapReview);
+      allReviews.push(...batch);
+      nextPaginationToken = result.nextPaginationToken as string | undefined;
+
+      if (batch.length === 0) break;
+    } while (nextPaginationToken && allReviews.length < maxTotal);
+
+    return allReviews.slice(0, maxTotal);
   } catch (err) {
     logger.warn({ appId, err }, "Failed to fetch Play Store reviews for app");
     return [];
@@ -71,7 +92,7 @@ export async function collectPlayStoreData(query: string): Promise<PlayStoreApp[
 
   const apps = await Promise.all(
     appIds.map(async (appId) => {
-      const reviews = await fetchReviews(appId, 150);
+      const reviews = await fetchAllReviews(appId, 500);
       return { appId, title: appId, reviews };
     }),
   );
