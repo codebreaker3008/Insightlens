@@ -1,4 +1,4 @@
-# SignalOS
+# InsightLens
 
 A product intelligence platform that analyzes customer feedback from Reddit and the Google Play Store, clusters it, and produces an evidence-backed AI report for any product or company.
 

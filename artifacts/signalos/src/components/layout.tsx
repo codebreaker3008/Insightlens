@@ -15,7 +15,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
             <div className="size-6 bg-primary rounded-sm flex items-center justify-center">
               <div className="size-2 bg-background rounded-full" />
             </div>
-            <span className="font-bold tracking-tight text-lg">SignalOS</span>
+            <span className="font-bold tracking-tight text-lg">InsightLens</span>
           </div>
         </div>
       </header>

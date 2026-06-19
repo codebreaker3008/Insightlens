@@ -8,8 +8,8 @@ export const openrouter = new OpenAI({
   baseURL: "https://openrouter.ai/api/v1",
   apiKey: process.env.OPENROUTER_API_KEY,
   defaultHeaders: {
-    "HTTP-Referer": "https://signalos.app",
-    "X-Title": "SignalOS",
+    "HTTP-Referer": "https://insightlens.app",
+    "X-Title": "InsightLens",
   },
 });
 

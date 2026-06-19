@@ -42,7 +42,7 @@ export function Home() {
       <div className="flex flex-col items-center justify-center min-h-[calc(100vh-8rem)] max-w-4xl mx-auto w-full py-12">
         <div className="text-center mb-12 space-y-4">
           <Badge variant="outline" className="mb-4 px-3 py-1 font-mono text-xs uppercase tracking-wider border-primary/30 text-primary bg-primary/5">
-            SignalOS Terminal v1.0
+            InsightLens v1.0
           </Badge>
           <h1 className="text-4xl md:text-6xl font-bold tracking-tight text-foreground">
             Stop guessing what customers want.
