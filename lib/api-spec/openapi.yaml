@@ -3,13 +3,17 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: SignalOS - Product Intelligence Platform API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: analysis
+    description: Product analysis operations
+  - name: reports
+    description: Report retrieval operations
 paths:
   /healthz:
     get:
@@ -24,6 +28,85 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /analyze:
+    post:
+      operationId: analyzeProduct
+      tags: [analysis]
+      summary: Analyze a product
+      description: >
+        Triggers data collection from Reddit and Google Play Store,
+        clusters feedback, and generates an AI-powered product intelligence report.
+        If a cached report exists under 24h old, returns it immediately.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AnalysisRequest"
+      responses:
+        "200":
+          description: Analysis complete
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Report"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  /reports/{query}:
+    get:
+      operationId: getReport
+      tags: [reports]
+      summary: Get cached report
+      description: Returns the most recent cached report for a product query if it exists and is under 24h old.
+      parameters:
+        - in: path
+          name: query
+          required: true
+          schema:
+            type: string
+          description: The product name or query
+      responses:
+        "200":
+          description: Cached report found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Report"
+        "404":
+          description: No cached report found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  /reports:
+    get:
+      operationId: listReports
+      tags: [reports]
+      summary: List recent reports
+      description: Returns the most recently cached reports up to 20
+      responses:
+        "200":
+          description: List of recent reports
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ReportSummary"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +117,262 @@ components:
       required:
         - status
 
+    ApiError:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+
+    AnalysisRequest:
+      type: object
+      required: [query]
+      properties:
+        query:
+          type: string
+          minLength: 1
+          description: Product name, company, app, service, or brand to analyze
+        forceRefresh:
+          type: boolean
+          description: If true, bypass cache and re-run the full analysis
+
+    SentimentBreakdown:
+      type: object
+      required: [positive, neutral, negative]
+      properties:
+        positive:
+          type: number
+          description: Percentage 0 to 100
+        neutral:
+          type: number
+          description: Percentage 0 to 100
+        negative:
+          type: number
+          description: Percentage 0 to 100
+
+    Evidence:
+      type: object
+      required: [text, source]
+      properties:
+        text:
+          type: string
+        source:
+          type: string
+          description: reddit or playstore
+        url:
+          type: ["string", "null"]
+        date:
+          type: ["string", "null"]
+        subreddit:
+          type: ["string", "null"]
+        rating:
+          type: ["integer", "null"]
+
+    ComplaintItem:
+      type: object
+      required: [title, mentionCount, severity, evidence]
+      properties:
+        title:
+          type: string
+        mentionCount:
+          type: integer
+        severity:
+          type: string
+        evidence:
+          type: array
+          items:
+            $ref: "#/components/schemas/Evidence"
+
+    PraiseItem:
+      type: object
+      required: [title, frequency, evidence]
+      properties:
+        title:
+          type: string
+        frequency:
+          type: integer
+        evidence:
+          type: array
+          items:
+            $ref: "#/components/schemas/Evidence"
+
+    FeatureRequest:
+      type: object
+      required: [title, frequency, evidence, estimatedImportance]
+      properties:
+        title:
+          type: string
+        frequency:
+          type: integer
+        evidence:
+          type: array
+          items:
+            $ref: "#/components/schemas/Evidence"
+        estimatedImportance:
+          type: string
+
+    CompetitorMention:
+      type: object
+      required: [name, mentionCount, context]
+      properties:
+        name:
+          type: string
+        mentionCount:
+          type: integer
+        context:
+          type: array
+          items:
+            type: string
+
+    FrustrationItem:
+      type: object
+      required: [title, severity, evidence]
+      properties:
+        title:
+          type: string
+        severity:
+          type: string
+        evidence:
+          type: array
+          items:
+            $ref: "#/components/schemas/Evidence"
+
+    Opportunity:
+      type: object
+      required: [problem, mentions, severity, opportunity, potentialImpact]
+      properties:
+        problem:
+          type: string
+        mentions:
+          type: integer
+        severity:
+          type: string
+        opportunity:
+          type: string
+        potentialImpact:
+          type: string
+
+    Recommendation:
+      type: object
+      required: [title, why, evidence, priority, expectedImpact]
+      properties:
+        title:
+          type: string
+        why:
+          type: string
+        evidence:
+          type: array
+          items:
+            type: string
+        priority:
+          type: string
+        expectedImpact:
+          type: string
+
+    ExecutiveSummary:
+      type: object
+      required: [overallSentiment, mainConcerns, biggestOpportunities, keyObservations]
+      properties:
+        overallSentiment:
+          type: string
+        mainConcerns:
+          type: array
+          items:
+            type: string
+        biggestOpportunities:
+          type: array
+          items:
+            type: string
+        keyObservations:
+          type: array
+          items:
+            type: string
+
+    DataSourceStats:
+      type: object
+      required: [redditPosts, redditComments, playStoreReviews, totalDataPoints]
+      properties:
+        redditPosts:
+          type: integer
+        redditComments:
+          type: integer
+        playStoreReviews:
+          type: integer
+        totalDataPoints:
+          type: integer
+
+    Report:
+      type: object
+      required:
+        - id
+        - query
+        - createdAt
+        - dataSourceStats
+        - executiveSummary
+        - sentiment
+        - topComplaints
+        - customerPraise
+        - featureRequests
+        - competitorMentions
+        - frustrations
+        - opportunities
+        - recommendations
+        - aiVerdict
+      properties:
+        id:
+          type: string
+        query:
+          type: string
+        createdAt:
+          type: string
+        dataSourceStats:
+          $ref: "#/components/schemas/DataSourceStats"
+        executiveSummary:
+          $ref: "#/components/schemas/ExecutiveSummary"
+        sentiment:
+          $ref: "#/components/schemas/SentimentBreakdown"
+        topComplaints:
+          type: array
+          items:
+            $ref: "#/components/schemas/ComplaintItem"
+        customerPraise:
+          type: array
+          items:
+            $ref: "#/components/schemas/PraiseItem"
+        featureRequests:
+          type: array
+          items:
+            $ref: "#/components/schemas/FeatureRequest"
+        competitorMentions:
+          type: array
+          items:
+            $ref: "#/components/schemas/CompetitorMention"
+        frustrations:
+          type: array
+          items:
+            $ref: "#/components/schemas/FrustrationItem"
+        opportunities:
+          type: array
+          items:
+            $ref: "#/components/schemas/Opportunity"
+        recommendations:
+          type: array
+          items:
+            $ref: "#/components/schemas/Recommendation"
+        aiVerdict:
+          type: string
+
+    ReportSummary:
+      type: object
+      required: [id, query, createdAt, overallSentiment, totalDataPoints]
+      properties:
+        id:
+          type: string
+        query:
+          type: string
+        createdAt:
+          type: string
+        overallSentiment:
+          type: string
+        totalDataPoints:
+          type: integer
