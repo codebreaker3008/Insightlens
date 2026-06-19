@@ -137,14 +137,26 @@ router.get("/reports/:query", async (req, res): Promise<void> => {
     return;
   }
 
-  const queryNormalized = normalizeQuery(decodeURIComponent(params.data.query));
+  const rawParam = decodeURIComponent(params.data.query);
 
-  const [cached] = await db
+  // Try lookup by ID first (frontend navigates using report.id),
+  // then fall back to queryNormalized for direct query lookups.
+  const [byId] = await db
     .select()
     .from(reportsTable)
-    .where(eq(reportsTable.queryNormalized, queryNormalized))
-    .orderBy(desc(reportsTable.createdAt))
+    .where(eq(reportsTable.id, rawParam))
     .limit(1);
+
+  const [byQuery] = byId
+    ? []
+    : await db
+        .select()
+        .from(reportsTable)
+        .where(eq(reportsTable.queryNormalized, normalizeQuery(rawParam)))
+        .orderBy(desc(reportsTable.createdAt))
+        .limit(1);
+
+  const cached = byId ?? byQuery;
 
   if (!cached) {
     res.status(404).json({ error: "No cached report found for this query." });
