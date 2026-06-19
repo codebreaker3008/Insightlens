@@ -1,0 +1,521 @@
+Build a production-ready web application called:
+
+SignalOS
+Tagline
+
+Stop guessing what customers want.
+
+Subtagline
+
+Analyze what the internet is saying about any product.
+
+CORE PRODUCT
+
+SignalOS is a product intelligence platform.
+
+Users enter the name of any product, company, app, service, or brand.
+
+Examples:
+
+Lenskart
+Uber
+Ola
+Swiggy
+Zomato
+Tinder
+Spotify
+Notion
+Slack
+Linear
+
+SignalOS automatically discovers real public customer feedback and discussions and generates an evidence-backed product intelligence report.
+
+The goal is to help founders, product managers, consultants, investors, designers, and builders understand:
+
+What customers love
+What customers hate
+What customers want improved
+What competitors are being mentioned
+What opportunities exist
+What should be built next
+CRITICAL REQUIREMENTS
+
+DO NOT BUILD:
+
+Authentication
+Login
+Signup
+User accounts
+User profiles
+Teams
+Organizations
+Workspaces
+Billing
+Stripe
+Subscriptions
+Supabase
+User database
+CRM features
+Fake dashboards
+Mock analytics
+Placeholder reports
+Example reviews
+Seed data
+Simulated insights
+Demo users
+
+The application must never generate fake information.
+
+Every report must be based only on real collected public data.
+
+If data cannot be found, display an appropriate empty state.
+
+Never invent evidence.
+
+DATA SOURCES
+
+Version 1 only uses:
+
+Reddit
+
+Search Reddit globally.
+
+Do not restrict searches to specific subreddits.
+
+Search all public Reddit discussions.
+
+Collect:
+
+Posts
+Comments
+Comparisons
+Recommendations
+Complaints
+Questions
+Discussions
+
+Examples:
+
+Search:
+
+Lenskart
+
+Additional search variations:
+
+Lenskart review
+Lenskart experience
+Lenskart complaint
+Lenskart issue
+Lenskart support
+Lenskart delivery
+Lenskart alternative
+Lenskart competitor
+Lenskart vs
+
+Gather discussions from all relevant public subreddits.
+
+Examples:
+
+r/india
+r/bangalore
+r/startups
+r/entrepreneur
+r/eyewear
+any other public subreddit
+
+Do not hardcode subreddit lists.
+
+Google Play Store
+
+Collect:
+
+Reviews
+Ratings
+Dates
+Review text
+
+Use real review data only.
+
+No fake reviews.
+
+USER FLOW
+
+Homepage contains:
+
+Large centered search input.
+
+Placeholder:
+
+"Enter a product name"
+
+Examples shown below:
+
+Lenskart
+Uber
+Swiggy
+Zomato
+Spotify
+Notion
+
+Single CTA:
+
+Analyze Product
+
+ANALYSIS PIPELINE
+
+When user submits:
+
+Collect Reddit discussions
+Collect Play Store reviews
+Normalize data
+Remove duplicates
+Remove spam
+Group similar feedback
+Generate product intelligence report
+Display report
+IMPORTANT AI ARCHITECTURE
+
+DO NOT send thousands of raw reviews to the LLM.
+
+Instead:
+
+Step 1:
+
+Collect feedback.
+
+Step 2:
+
+Cluster feedback locally.
+
+Step 3:
+
+Generate categories.
+
+Examples:
+
+Delivery Delays
+Customer Support
+Pricing Issues
+App Performance
+Feature Requests
+
+Step 4:
+
+Send only cluster summaries to the LLM.
+
+This dramatically reduces token usage.
+
+AI PROVIDER
+
+Use OpenRouter.
+
+Implement model routing.
+
+Primary model:
+
+DeepSeek V3
+
+Fallback 1:
+
+Qwen
+
+Fallback 2:
+
+Llama 3.3 70B
+
+Fallback 3:
+
+Gemini Flash
+
+If one model fails, automatically try the next model.
+
+The application should continue working even if a model becomes unavailable.
+
+REPORT STRUCTURE
+
+Generate a professional report.
+
+Executive Summary
+
+Provide:
+
+Overall sentiment
+Main concerns
+Biggest opportunities
+Key observations
+Top Complaints
+
+Rank complaints by frequency and severity.
+
+Examples:
+
+Delivery Delays
+
+Customer Support
+
+App Crashes
+
+Prescription Accuracy
+
+For each complaint display:
+
+Mention count
+Relative severity
+Evidence
+Customer Praise
+
+Identify positive themes.
+
+Examples:
+
+Affordable pricing
+
+Fast checkout
+
+Quality products
+
+Good delivery experience
+
+Display:
+
+Frequency
+Supporting evidence
+Feature Requests
+
+Identify requested improvements.
+
+For each request display:
+
+Frequency
+Example mentions
+Estimated importance
+Competitor Mentions
+
+Identify competitor references.
+
+Examples:
+
+Titan Eye+
+
+Specsmakers
+
+Jira
+
+Linear
+
+Notion
+
+Display:
+
+Mention frequency
+Mention context
+Customer Frustrations
+
+Explain recurring pain points.
+
+Display:
+
+Frustration
+Severity
+Evidence
+Sentiment Analysis
+
+Display:
+
+Positive
+Neutral
+Negative
+
+Use actual analyzed results.
+
+Never fabricate percentages.
+
+Opportunity Engine
+
+This is a flagship feature.
+
+For every major complaint cluster generate:
+
+Problem
+
+Evidence
+
+Severity
+
+Opportunity
+
+Potential Business Impact
+
+Example:
+
+Problem:
+
+Delivery Delays
+
+Mentions:
+
+127
+
+Severity:
+
+High
+
+Opportunity:
+
+Improve delivery tracking and communication.
+
+Potential Impact:
+
+Higher retention and reduced support load.
+
+Product Recommendations
+
+Generate prioritized recommendations.
+
+Each recommendation must include:
+
+Recommendation
+Why it matters
+Evidence
+Priority level
+Expected impact
+AI Verdict
+
+Provide a final conclusion.
+
+Examples:
+
+Focus on retention.
+
+Improve customer support.
+
+Reduce onboarding friction.
+
+Improve operational reliability.
+
+Strengthen competitive differentiation.
+
+All conclusions must be supported by evidence.
+
+EVIDENCE SYSTEM
+
+Every insight must be clickable.
+
+When expanded show:
+
+Original Reddit posts
+
+Original Reddit comments
+
+Original Play Store reviews
+
+Dates
+
+Source links
+
+The system must be transparent.
+
+No black-box conclusions.
+
+CACHING
+
+Implement report caching.
+
+If a report was generated recently:
+
+Example:
+
+Lenskart
+
+Then future searches for Lenskart should reuse the cached analysis.
+
+Cache duration:
+
+24 hours
+
+This reduces AI costs and improves performance.
+
+LOCAL STORAGE
+
+Store:
+
+Search history
+Recent searches
+
+Use browser local storage only.
+
+Do not build user databases.
+
+DESIGN
+
+Premium SaaS quality.
+
+Inspired by:
+
+Linear
+Vercel
+Stripe
+Notion
+
+Requirements:
+
+Responsive
+Mobile friendly
+Dark mode
+Modern typography
+Beautiful charts
+Professional spacing
+Fast loading
+Accessible
+
+The UI should feel like a premium product intelligence platform.
+
+ERROR HANDLING
+
+Gracefully handle:
+
+No Reddit results
+No Play Store results
+API failures
+OpenRouter failures
+Rate limits
+Network issues
+Empty responses
+
+Never crash.
+
+Always display useful feedback.
+
+DEPLOYMENT
+
+Deployable directly to:
+
+Vercel
+
+Use:
+
+Next.js 15
+TypeScript
+Tailwind CSS
+shadcn/ui
+
+No unnecessary dependencies.
+
+FINAL PRODUCT GOAL
+
+A user should be able to enter:
+
+"Lenskart"
+
+and receive a professional product intelligence report generated from real public customer discussions and real public reviews that clearly explains:
+
+What customers love
+What customers hate
+What customers want improved
+Competitor mentions
+Product weaknesses
+Business opportunities
+Product recommendations
+Evidence supporting every conclusion
+
+The product must feel like a real SaaS platform that founders and product managers would genuinely use, not a demo, not a prototype, and not a generic sentiment-analysis dashboard.
