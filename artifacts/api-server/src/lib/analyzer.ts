@@ -76,6 +76,52 @@ export interface AnalysisReport {
   aiVerdict: string;
 }
 
+/**
+ * Find items most relevant to a complaint/praise/feature topic.
+ * Matches by:
+ *  1. Exact phrase from AI's evidenceQuotes (first 40 chars)
+ *  2. Keywords from the section title (words > 4 chars)
+ *  3. Fallback: sample from the pool ensuring no two items share the same source
+ *     subreddit/platform so evidence doesn't repeat from the same place.
+ */
+function findRelevantItems(pool: FeedbackItem[], title: string, evidenceQuotes?: string[]): FeedbackItem[] {
+  const titleWords = title.toLowerCase().split(/\W+/).filter((w) => w.length > 4);
+
+  // Tier 1: exact quote match
+  const tier1 = evidenceQuotes?.length
+    ? pool.filter((i) =>
+        evidenceQuotes.some((q) => i.text.toLowerCase().includes(q.slice(0, 40).toLowerCase())),
+      )
+    : [];
+
+  // Tier 2: title keyword match (items not already in tier1)
+  const tier1Texts = new Set(tier1.map((i) => i.text.slice(0, 50)));
+  const tier2 = titleWords.length
+    ? pool.filter(
+        (i) =>
+          !tier1Texts.has(i.text.slice(0, 50)) &&
+          titleWords.some((w) => i.text.toLowerCase().includes(w)),
+      )
+    : [];
+
+  // Tier 3: diverse fallback — pick from remaining pool, one per subreddit/platform
+  const usedSubs = new Set([...tier1, ...tier2].map((i) => i.subreddit ?? i.source));
+  const tier3 = pool.filter(
+    (i) => !tier1Texts.has(i.text.slice(0, 50)) && !tier2.some((t) => t.text.slice(0, 50) === i.text.slice(0, 50)),
+  );
+  const diverseFallback: FeedbackItem[] = [];
+  for (const item of tier3) {
+    const key = item.subreddit ?? item.source;
+    if (!usedSubs.has(key) || diverseFallback.length < 3) {
+      diverseFallback.push(item);
+      usedSubs.add(key);
+      if (diverseFallback.length >= 3) break;
+    }
+  }
+
+  return [...tier1, ...tier2, ...diverseFallback].slice(0, 6);
+}
+
 function toEvidenceItems(items: FeedbackItem[], max = 3): EvidenceItem[] {
   return items.slice(0, max).map((i) => ({
     text: i.text.slice(0, 400),
@@ -273,44 +319,24 @@ Important rules:
       title: c.title,
       mentionCount: c.mentionCount,
       severity: c.severity,
-      evidence: toEvidenceItems(
-        negativeItems.filter((i) =>
-          c.evidenceQuotes?.some((q) => i.text.toLowerCase().includes(q.slice(0, 30).toLowerCase())),
-        ).concat(negativeItems).slice(0, 3),
-        3,
-      ),
+      evidence: toEvidenceItems(findRelevantItems(negativeItems, c.title, c.evidenceQuotes), 3),
     })),
     customerPraise: (parsed.customerPraise ?? []).map((p) => ({
       title: p.title,
       frequency: p.frequency,
-      evidence: toEvidenceItems(
-        positiveItems.filter((i) =>
-          p.evidenceQuotes?.some((q) => i.text.toLowerCase().includes(q.slice(0, 30).toLowerCase())),
-        ).concat(positiveItems).slice(0, 3),
-        3,
-      ),
+      evidence: toEvidenceItems(findRelevantItems(positiveItems, p.title, p.evidenceQuotes), 3),
     })),
     featureRequests: (parsed.featureRequests ?? []).map((f) => ({
       title: f.title,
       frequency: f.frequency,
       estimatedImportance: f.estimatedImportance,
-      evidence: toEvidenceItems(
-        allItems.filter((i) =>
-          f.evidenceQuotes?.some((q) => i.text.toLowerCase().includes(q.slice(0, 30).toLowerCase())),
-        ).slice(0, 3),
-        3,
-      ),
+      evidence: toEvidenceItems(findRelevantItems(allItems, f.title, f.evidenceQuotes), 3),
     })),
     competitorMentions: parsed.competitorMentions ?? [],
     frustrations: (parsed.frustrations ?? []).map((fr) => ({
       title: fr.title,
       severity: fr.severity,
-      evidence: toEvidenceItems(
-        negativeItems.filter((i) =>
-          fr.evidenceQuotes?.some((q) => i.text.toLowerCase().includes(q.slice(0, 30).toLowerCase())),
-        ).concat(negativeItems).slice(0, 3),
-        3,
-      ),
+      evidence: toEvidenceItems(findRelevantItems(negativeItems, fr.title, fr.evidenceQuotes), 3),
     })),
     opportunities: parsed.opportunities ?? [],
     recommendations: parsed.recommendations ?? [],
