@@ -59,9 +59,16 @@ export function Home() {
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     if (!query.trim()) return;
+    const trimmedQuery = query.trim();
+    if (typeof window !== "undefined" && window.pendo) {
+      pendo.track("product_analysis_submitted", {
+        query: trimmedQuery,
+        queryLength: trimmedQuery.length,
+      });
+    }
     navigatedRef.current = false;
-    setPendingQuery(query.trim());
-    analyze.mutate({ data: { query: query.trim() } });
+    setPendingQuery(trimmedQuery);
+    analyze.mutate({ data: { query: trimmedQuery } });
   };
 
   const handleExampleClick = (example: string) => {

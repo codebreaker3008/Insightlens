@@ -14,6 +14,7 @@ import { collectPlayStoreData } from "../../lib/playstore";
 import { normalizeFeedback, clusterFeedback, deduplicateItems } from "../../lib/cluster";
 import { generateReport } from "../../lib/analyzer";
 import { logger } from "../../lib/logger";
+import { pendoTrack } from "../../lib/pendo";
 
 const router: IRouter = Router();
 
@@ -47,6 +48,11 @@ router.post("/analyze", async (req, res): Promise<void> => {
       const age = Date.now() - new Date(cached.createdAt).getTime();
       if (age < CACHE_TTL_MS) {
         req.log.info({ query }, "Returning cached report");
+        pendoTrack("cached_report_served", {
+          query,
+          reportId: cached.id,
+          cacheAgeMs: age,
+        });
         res.json(AnalyzeProductResponse.parse(cached.reportData));
         return;
       }
@@ -75,6 +81,7 @@ router.post("/analyze", async (req, res): Promise<void> => {
     const feedbackSummary = clusterFeedback(dedupedItems);
 
     if (dedupedItems.length === 0) {
+      pendoTrack("empty_analysis_result", { query });
       res.status(200).json({
         id: `empty-${Date.now()}`,
         query,
@@ -121,9 +128,23 @@ router.post("/analyze", async (req, res): Promise<void> => {
       });
 
     req.log.info({ query, reportId: report.id }, "Report generated and cached");
+    pendoTrack("product_analysis_completed", {
+      query,
+      reportId: report.id,
+      totalDataPoints: redditPosts.length + redditComments + playStoreReviews,
+      redditPosts: redditPosts.length,
+      redditComments,
+      playStoreReviews,
+      feedbackItemCount: rawItems.length,
+      deduplicatedItemCount: dedupedItems.length,
+    });
     res.json(AnalyzeProductResponse.parse(report));
   } catch (err) {
     req.log.error({ err, query }, "Analysis failed");
+    pendoTrack("product_analysis_failed", {
+      query,
+      errorMessage: err instanceof Error ? err.message.substring(0, 200) : "Unknown error",
+    });
     res.status(500).json({
       error: err instanceof Error ? err.message : "Analysis failed. Please try again.",
     });
