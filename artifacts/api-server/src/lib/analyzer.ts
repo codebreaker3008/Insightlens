@@ -116,19 +116,21 @@ export async function generateReport(
 ): Promise<AnalysisReport> {
   logger.info({ query }, "Generating AI analysis report");
 
-  const prompt = `You are a senior product intelligence analyst. Analyze the following customer feedback for "${query}" and generate a comprehensive product intelligence report.
+  const prompt = `You are a senior product intelligence analyst specializing in brand perception, customer experience, and market positioning. Analyze the following public feedback for "${query}" — this may be a product, a company, a service, or a brand — and generate a comprehensive intelligence report.
 
 ${feedbackSummary}
+
+Your goal is to surface what customers, users, and the public genuinely think about "${query}" as a whole: the company's reputation, product quality, pricing, customer support, competitors, and brand perception. Do NOT treat this purely as an app review analysis — look for broader strategic signals.
 
 Generate a detailed JSON report with ONLY real insights derived from the data above. Do NOT invent evidence. If data is insufficient for a section, return fewer items (or empty arrays). Every insight must be grounded in the feedback provided.
 
 Respond with ONLY valid JSON matching this exact structure:
 {
   "executiveSummary": {
-    "overallSentiment": "string (e.g. Mixed - customers appreciate X but struggle with Y)",
-    "mainConcerns": ["concern1", "concern2", "concern3"],
-    "biggestOpportunities": ["opp1", "opp2", "opp3"],
-    "keyObservations": ["obs1", "obs2", "obs3"]
+    "overallSentiment": "string — concise summary e.g. 'Mostly positive: customers love the core product but frustrated by pricing and support'",
+    "mainConcerns": ["top concern about the company/product", "second concern", "third concern"],
+    "biggestOpportunities": ["opportunity based on real gaps mentioned", "second opportunity", "third opportunity"],
+    "keyObservations": ["notable observation about brand/market position", "second observation", "third observation"]
   },
   "sentiment": {
     "positive": <number 0-100>,
@@ -137,63 +139,69 @@ Respond with ONLY valid JSON matching this exact structure:
   },
   "topComplaints": [
     {
-      "title": "complaint title",
+      "title": "specific complaint about the company, product, service, or brand",
       "mentionCount": <estimated count based on data>,
       "severity": "low|medium|high|critical",
-      "evidenceQuotes": ["exact quote from feedback", "another quote"]
+      "evidenceQuotes": ["exact or near-exact quote from feedback", "another quote"]
     }
   ],
   "customerPraise": [
     {
-      "title": "praise theme",
+      "title": "what customers genuinely appreciate about the company or product",
       "frequency": <estimated count>,
-      "evidenceQuotes": ["exact quote"]
+      "evidenceQuotes": ["exact or near-exact quote"]
     }
   ],
   "featureRequests": [
     {
-      "title": "feature request title",
+      "title": "feature, improvement, or service change users want",
       "frequency": <estimated count>,
       "estimatedImportance": "low|medium|high",
-      "evidenceQuotes": ["exact quote"]
+      "evidenceQuotes": ["exact or near-exact quote"]
     }
   ],
   "competitorMentions": [
     {
-      "name": "competitor name",
+      "name": "competitor or alternative brand name",
       "mentionCount": <estimated count>,
-      "context": ["context snippet 1", "context snippet 2"]
+      "context": ["context of how they're mentioned — favorably or unfavorably"]
     }
   ],
   "frustrations": [
     {
-      "title": "frustration title",
+      "title": "recurring frustration with the company, product, pricing, or support",
       "severity": "low|medium|high|critical",
-      "evidenceQuotes": ["exact quote"]
+      "evidenceQuotes": ["exact or near-exact quote"]
     }
   ],
   "opportunities": [
     {
-      "problem": "specific problem",
+      "problem": "specific problem signal from the data",
       "mentions": <estimated count>,
       "severity": "low|medium|high|critical",
-      "opportunity": "specific opportunity to address this",
-      "potentialImpact": "business impact description"
+      "opportunity": "strategic opportunity this creates for the company",
+      "potentialImpact": "what improving this would mean for the brand or business"
     }
   ],
   "recommendations": [
     {
-      "title": "recommendation title",
-      "why": "why this matters based on the data",
-      "evidence": ["supporting data point"],
+      "title": "actionable recommendation for the company",
+      "why": "why this matters — grounded in the feedback data",
+      "evidence": ["supporting data point from feedback"],
       "priority": "low|medium|high|critical",
-      "expectedImpact": "expected outcome"
+      "expectedImpact": "expected outcome if this recommendation is acted on"
     }
   ],
-  "aiVerdict": "1-2 sentence conclusive verdict with the most important actionable insight"
+  "aiVerdict": "2-3 sentence conclusive verdict: what does the public truly think about ${query}, what is the most important thing they need to change or double down on, and what is the biggest strategic risk or opportunity?"
 }
 
-Important: sentiment must sum to 100. Include 3-8 items per section where data supports it. Be specific — use product-specific language, not generic observations.`;
+Important rules:
+- sentiment must sum to 100
+- Include 3-8 items per section where the data supports it
+- Be specific — use company/product-specific language, not generic platitudes
+- Complaints, frustrations, and praise should reflect what people say about the COMPANY and PRODUCT broadly, not just app bugs
+- Feature requests should include business/service improvements, not just UI features
+- The AI verdict must be opinionated, direct, and evidence-backed`;
 
   const responseText = await chatWithFallback(
     [
