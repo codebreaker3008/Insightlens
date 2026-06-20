@@ -99,24 +99,25 @@ export function ReportView() {
 
   return (
     <Layout>
-      <div className="space-y-8 animate-in fade-in duration-500 pb-16">
+      <div className="space-y-8 animate-in fade-in duration-500 pb-16 min-w-0 w-full">
         
         {/* Header Section */}
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 min-w-0">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground mb-2">
               <span className="font-mono">{report.id.substring(0, 8)}</span>
               <span>•</span>
               <span>Generated {format(new Date(report.createdAt), 'MMM d, yyyy h:mm a')}</span>
             </div>
-            <h1 className="text-4xl md:text-5xl font-bold tracking-tight mb-2">
+            <h1 className="text-4xl md:text-5xl font-bold tracking-tight mb-2 break-words">
               {report.query}
             </h1>
-            <div className="flex items-center gap-3">
-              <Badge variant="outline" className="text-xs uppercase font-mono tracking-wider">
-                Overall: <span className="font-bold ml-1 text-foreground">{report.executiveSummary.overallSentiment}</span>
-              </Badge>
-              <Badge variant="secondary" className="text-xs font-mono">
+            <div className="flex flex-wrap items-center gap-3 min-w-0">
+              <div className="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-mono uppercase tracking-wider border-border text-muted-foreground min-w-0 max-w-xs overflow-hidden">
+                <span className="shrink-0 mr-1">Overall:</span>
+                <span className="font-bold text-foreground truncate">{report.executiveSummary.overallSentiment}</span>
+              </div>
+              <Badge variant="secondary" className="text-xs font-mono shrink-0">
                 {report.dataSourceStats.totalDataPoints.toLocaleString()} Signals
               </Badge>
             </div>
@@ -225,15 +226,15 @@ export function ReportView() {
               
               <div className="space-y-4">
                 {report.opportunities.map((opp, i) => (
-                  <Card key={i} className="border-border/50 overflow-hidden">
+                  <Card key={i} className="relative border-border/50 overflow-hidden">
                     <div className="absolute top-0 left-0 w-1 h-full bg-chart-4" />
                     <CardHeader className="pb-3 pl-6">
-                      <div className="flex justify-between items-start gap-4">
-                        <div>
+                      <div className="flex justify-between items-start gap-4 min-w-0">
+                        <div className="min-w-0">
                           <Badge className="mb-2 bg-chart-4/10 text-chart-4 hover:bg-chart-4/20 border-chart-4/20">
                             {opp.severity} Severity
                           </Badge>
-                          <CardTitle className="text-lg">{opp.opportunity}</CardTitle>
+                          <CardTitle className="text-lg break-words">{opp.opportunity}</CardTitle>
                         </div>
                         <div className="text-right shrink-0">
                           <div className="text-2xl font-bold">{opp.mentions}</div>
@@ -242,11 +243,11 @@ export function ReportView() {
                       </div>
                     </CardHeader>
                     <CardContent className="pl-6 space-y-4">
-                      <div className="bg-muted/30 p-3 rounded-md border border-border/40 text-sm">
+                      <div className="bg-muted/30 p-3 rounded-md border border-border/40 text-sm break-words">
                         <span className="font-semibold text-muted-foreground mr-2 uppercase text-xs tracking-wider">Problem:</span>
                         {opp.problem}
                       </div>
-                      <div className="text-sm">
+                      <div className="text-sm break-words">
                         <span className="font-semibold text-muted-foreground mr-2 uppercase text-xs tracking-wider">Impact:</span>
                         {opp.potentialImpact}
                       </div>
@@ -427,17 +428,17 @@ export function ReportView() {
 
 function EvidenceCard({ evidence }: { evidence: any }) {
   return (
-    <div className="bg-muted/40 p-3 rounded-md border border-border/40 text-sm space-y-2">
-      <p className="italic text-muted-foreground leading-relaxed">"{evidence.text}"</p>
-      <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground font-mono">
-        <Badge variant="outline" className="bg-background text-[10px] px-1.5 py-0">
+    <div className="bg-muted/40 p-3 rounded-md border border-border/40 text-sm space-y-2 min-w-0 w-full overflow-hidden">
+      <p className="italic text-muted-foreground leading-relaxed break-words overflow-hidden">"{evidence.text}"</p>
+      <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground font-mono min-w-0">
+        <Badge variant="outline" className="bg-background text-[10px] px-1.5 py-0 shrink-0">
           {evidence.source}
         </Badge>
-        {evidence.date && <span>{evidence.date}</span>}
-        {evidence.rating && <span className="text-chart-4">★ {evidence.rating}/5</span>}
-        {evidence.subreddit && <span>r/{evidence.subreddit}</span>}
+        {evidence.date && <span className="shrink-0">{evidence.date}</span>}
+        {evidence.rating && <span className="text-chart-4 shrink-0">★ {evidence.rating}/5</span>}
+        {evidence.subreddit && <span className="shrink-0">r/{evidence.subreddit}</span>}
         {evidence.url && (
-          <a href={evidence.url} target="_blank" rel="noreferrer" className="text-primary hover:underline inline-flex items-center ml-auto">
+          <a href={evidence.url} target="_blank" rel="noreferrer" className="text-primary hover:underline inline-flex items-center ml-auto shrink-0">
             Source <ExternalLink className="size-3 ml-1" />
           </a>
         )}
