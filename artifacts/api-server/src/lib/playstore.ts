@@ -1,3 +1,9 @@
+/**
+ * Play Store data source — supplementary signal only.
+ * Fetches reviews for the top matching app to capture app-specific UX feedback.
+ * Intentionally capped at 150 reviews from 1 app so it doesn't drown out
+ * broader community discussions from Reddit.
+ */
 import { logger } from "./logger";
 
 export interface PlayStoreReview {
@@ -22,11 +28,12 @@ async function searchPlayStore(query: string): Promise<string[]> {
     const gplay = await import("google-play-scraper");
     const results = await gplay.default.search({
       term: query,
-      num: 5,
+      num: 3,
       lang: "en",
       country: "us",
     });
-    return results.map((r: { appId: string }) => r.appId).slice(0, 3);
+    // Only take the top 1 result — we want supplementary signal, not dominance
+    return results.map((r: { appId: string }) => r.appId).slice(0, 1);
   } catch (err) {
     logger.warn({ err }, "Play Store search failed");
     return [];
@@ -51,30 +58,19 @@ function mapReview(r: Record<string, unknown>): PlayStoreReview {
   };
 }
 
-async function fetchAllReviews(appId: string, maxTotal = 500): Promise<PlayStoreReview[]> {
+async function fetchReviews(appId: string, max = 150): Promise<PlayStoreReview[]> {
   try {
     const gplay = await import("google-play-scraper");
-    const allReviews: PlayStoreReview[] = [];
-    let nextPaginationToken: string | undefined;
+    const result = await gplay.default.reviews({
+      appId,
+      lang: "en",
+      country: "us",
+      sort: 1 as unknown as Parameters<typeof gplay.default.reviews>[0]["sort"],
+      num: max,
+    });
 
-    do {
-      const result = await gplay.default.reviews({
-        appId,
-        lang: "en",
-        country: "us",
-        sort: 1 as unknown as Parameters<typeof gplay.default.reviews>[0]["sort"],
-        num: 300,
-        ...(nextPaginationToken ? { nextPaginationToken } : {}),
-      });
-
-      const batch = (result.data as unknown as Record<string, unknown>[]).map(mapReview);
-      allReviews.push(...batch);
-      nextPaginationToken = result.nextPaginationToken as string | undefined;
-
-      if (batch.length === 0) break;
-    } while (nextPaginationToken && allReviews.length < maxTotal);
-
-    return allReviews.slice(0, maxTotal);
+    const reviews = (result.data as unknown as Record<string, unknown>[]).map(mapReview);
+    return reviews.slice(0, max);
   } catch (err) {
     logger.warn({ appId, err }, "Failed to fetch Play Store reviews for app");
     return [];
@@ -82,7 +78,7 @@ async function fetchAllReviews(appId: string, maxTotal = 500): Promise<PlayStore
 }
 
 export async function collectPlayStoreData(query: string): Promise<PlayStoreApp[]> {
-  logger.info({ query }, "Collecting Play Store data");
+  logger.info({ query }, "Collecting supplementary Play Store data");
 
   const appIds = await searchPlayStore(query);
   if (appIds.length === 0) {
@@ -92,13 +88,13 @@ export async function collectPlayStoreData(query: string): Promise<PlayStoreApp[
 
   const apps = await Promise.all(
     appIds.map(async (appId) => {
-      const reviews = await fetchAllReviews(appId, 500);
+      const reviews = await fetchReviews(appId, 150);
       return { appId, title: appId, reviews };
     }),
   );
 
   const total = apps.reduce((sum, a) => sum + a.reviews.length, 0);
-  logger.info({ apps: apps.length, reviews: total }, "Play Store data collected");
+  logger.info({ apps: apps.length, reviews: total }, "Play Store supplementary data collected");
 
   return apps.filter((a) => a.reviews.length > 0);
 }
