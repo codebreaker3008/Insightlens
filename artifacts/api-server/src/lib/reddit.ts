@@ -78,7 +78,7 @@ function toSubredditName(query: string): string {
 }
 
 /** Search posts across ALL of Reddit mentioning the query keyword */
-async function fetchKeywordPosts(query: string, limit = 200): Promise<ArcticPost[]> {
+async function fetchKeywordPosts(query: string, limit = 150): Promise<ArcticPost[]> {
   const q = encodeURIComponent(query);
   const url = `${ARCTIC_BASE}/posts/search?q=${q}&limit=${limit}`;
   const data = await fetchJson<{ data: ArcticPost[] }>(url);
@@ -86,7 +86,7 @@ async function fetchKeywordPosts(query: string, limit = 200): Promise<ArcticPost
 }
 
 /** Search comments across ALL of Reddit mentioning the query keyword */
-async function fetchKeywordComments(query: string, limit = 300): Promise<ArcticComment[]> {
+async function fetchKeywordComments(query: string, limit = 250): Promise<ArcticComment[]> {
   const q = encodeURIComponent(query);
   const url = `${ARCTIC_BASE}/comments/search?q=${q}&limit=${limit}`;
   const data = await fetchJson<{ data: ArcticComment[] }>(url);

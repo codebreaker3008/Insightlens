@@ -426,12 +426,6 @@ export function ReportView() {
   );
 }
 
-const REVIEW_PLATFORMS = new Set(["G2", "Capterra", "TrustRadius", "Product Hunt"]);
-
-function platformLabel(subreddit: string): string {
-  return REVIEW_PLATFORMS.has(subreddit) ? subreddit : `r/${subreddit}`;
-}
-
 function EvidenceCard({ evidence }: { evidence: any }) {
   return (
     <div className="bg-muted/40 p-3 rounded-md border border-border/40 text-sm space-y-2 min-w-0 w-full overflow-hidden">
@@ -440,9 +434,9 @@ function EvidenceCard({ evidence }: { evidence: any }) {
         <Badge variant="outline" className="bg-background text-[10px] px-1.5 py-0 shrink-0">
           {evidence.source}
         </Badge>
+        {evidence.date && <span className="shrink-0">{evidence.date}</span>}
         {evidence.rating && <span className="text-chart-4 shrink-0">★ {evidence.rating}/5</span>}
-        {evidence.subreddit && <span className="shrink-0">{platformLabel(evidence.subreddit)}</span>}
-        {evidence.date && <span className="shrink-0 text-muted-foreground/60">{evidence.date.slice(0, 10)}</span>}
+        {evidence.subreddit && <span className="shrink-0">r/{evidence.subreddit}</span>}
         {evidence.url && (
           <a href={evidence.url} target="_blank" rel="noreferrer" className="text-primary hover:underline inline-flex items-center ml-auto shrink-0">
             Source <ExternalLink className="size-3 ml-1" />

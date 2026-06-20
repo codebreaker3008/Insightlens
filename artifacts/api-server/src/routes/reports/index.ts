@@ -11,7 +11,6 @@ import {
 } from "@workspace/api-zod";
 import { collectRedditData } from "../../lib/reddit";
 import { collectPlayStoreData } from "../../lib/playstore";
-import { collectReviewSiteData } from "../../lib/review-sources";
 import { normalizeFeedback, clusterFeedback, deduplicateItems } from "../../lib/cluster";
 import { generateReport } from "../../lib/analyzer";
 import { logger } from "../../lib/logger";
@@ -57,10 +56,9 @@ router.post("/analyze", async (req, res): Promise<void> => {
   try {
     req.log.info({ query }, "Starting data collection");
 
-    const [redditPosts, playStoreApps, reviewSiteItems] = await Promise.all([
+    const [redditPosts, playStoreApps] = await Promise.all([
       collectRedditData(query),
       collectPlayStoreData(query),
-      collectReviewSiteData(query),
     ]);
 
     const redditComments = redditPosts.reduce((sum, p) => sum + p.comments.length, 0);
@@ -70,10 +68,9 @@ router.post("/analyze", async (req, res): Promise<void> => {
       redditPosts: redditPosts.length,
       redditComments,
       playStoreReviews,
-      reviewSiteItems: reviewSiteItems.length,
     }, "Data collected, clustering");
 
-    const rawItems = [...normalizeFeedback(redditPosts, playStoreApps), ...reviewSiteItems];
+    const rawItems = normalizeFeedback(redditPosts, playStoreApps);
     const dedupedItems = deduplicateItems(rawItems);
     const feedbackSummary = clusterFeedback(dedupedItems);
 
