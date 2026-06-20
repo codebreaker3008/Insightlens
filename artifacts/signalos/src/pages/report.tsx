@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useParams, useLocation } from "wouter";
 import { useGetReport, useAnalyzeProduct, getGetReportQueryKey } from "@workspace/api-client-react";
 import { Layout } from "@/components/layout";
@@ -10,6 +11,10 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { RefreshCw, Database, MessageSquare, Star, TrendingUp, AlertTriangle, Lightbulb, Bot, ExternalLink, ArrowLeft } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from "recharts";
 import { format } from "date-fns";
+
+// Module-level dedup sets to prevent re-firing on component remounts
+const viewedReportIds = new Set<string>();
+const notFoundReportIds = new Set<string>();
 
 export function ReportView() {
   const params = useParams();
@@ -27,6 +32,13 @@ export function ReportView() {
 
   const handleReanalyze = () => {
     if (!report?.query) return;
+    if (typeof window !== "undefined" && window.pendo) {
+      pendo.track("report_reanalysis_requested", {
+        query: report.query,
+        previousReportId: id,
+        forceRefresh: true,
+      });
+    }
     analyze.mutate(
       { data: { query: report.query, forceRefresh: true } },
       {
@@ -40,6 +52,43 @@ export function ReportView() {
       }
     );
   };
+
+  // Track report_not_found once per report ID
+  useEffect(() => {
+    if (!isLoading && !analyze.isPending && (isError || !report)) {
+      if (!notFoundReportIds.has(id)) {
+        notFoundReportIds.add(id);
+        if (typeof window !== "undefined" && window.pendo) {
+          pendo.track("report_not_found", {
+            reportId: id,
+          });
+        }
+      }
+    }
+  }, [isLoading, analyze.isPending, isError, report, id]);
+
+  // Track report_viewed once per report ID
+  useEffect(() => {
+    if (report && !viewedReportIds.has(report.id)) {
+      viewedReportIds.add(report.id);
+      if (typeof window !== "undefined" && window.pendo) {
+        pendo.track("report_viewed", {
+          reportId: report.id,
+          query: report.query,
+          totalDataPoints: report.dataSourceStats?.totalDataPoints,
+          overallSentiment: report.executiveSummary?.overallSentiment,
+          sentimentPositive: report.sentiment?.positive,
+          sentimentNegative: report.sentiment?.negative,
+          sentimentNeutral: report.sentiment?.neutral,
+          complaintsCount: report.topComplaints?.length,
+          featureRequestsCount: report.featureRequests?.length,
+          opportunitiesCount: report.opportunities?.length,
+          competitorMentionsCount: report.competitorMentions?.length,
+          recommendationsCount: report.recommendations?.length,
+        });
+      }
+    }
+  }, [report]);
 
   if (isLoading || analyze.isPending) {
     return (
