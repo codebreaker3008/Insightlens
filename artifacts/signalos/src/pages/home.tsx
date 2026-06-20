@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
 import { useAnalyzeProduct, useListReports } from "@workspace/api-client-react";
 import { Search, History, Loader2, ArrowRight } from "lucide-react";
@@ -15,22 +15,53 @@ const EXAMPLES = ["Spotify", "Notion", "Uber", "Lenskart", "Swiggy", "Zomato", "
 export function Home() {
   const [, setLocation] = useLocation();
   const [query, setQuery] = useState("");
-  
+  const [pendingQuery, setPendingQuery] = useState<string | null>(null);
+  const navigatedRef = useRef(false);
+
   const analyze = useAnalyzeProduct();
-  const { data: recentReports, isLoading: isReportsLoading } = useListReports();
+
+  const isAnalyzing = analyze.isPending || (analyze.isError && pendingQuery !== null);
+
+  const { data: recentReports } = useListReports({
+    query: {
+      refetchInterval: pendingQuery !== null ? 3000 : false,
+    },
+  });
+
+  useEffect(() => {
+    analyze.reset();
+    navigatedRef.current = false;
+  }, []);
+
+  useEffect(() => {
+    if (navigatedRef.current) return;
+    if (analyze.isSuccess && analyze.data?.id) {
+      navigatedRef.current = true;
+      setPendingQuery(null);
+      setLocation(`/report/${analyze.data.id}`);
+    }
+  }, [analyze.isSuccess, analyze.data?.id]);
+
+  useEffect(() => {
+    if (navigatedRef.current) return;
+    if (!pendingQuery || !recentReports) return;
+    const normalized = pendingQuery.trim().toLowerCase();
+    const match = recentReports.find(
+      (r) => r.query.toLowerCase() === normalized
+    );
+    if (match) {
+      navigatedRef.current = true;
+      setPendingQuery(null);
+      setLocation(`/report/${match.id}`);
+    }
+  }, [recentReports, pendingQuery]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     if (!query.trim()) return;
-    
-    analyze.mutate(
-      { data: { query: query.trim() } },
-      {
-        onSuccess: (report) => {
-          setLocation(`/report/${report.id}`);
-        },
-      }
-    );
+    navigatedRef.current = false;
+    setPendingQuery(query.trim());
+    analyze.mutate({ data: { query: query.trim() } });
   };
 
   const handleExampleClick = (example: string) => {
@@ -53,7 +84,7 @@ export function Home() {
           </p>
         </div>
 
-        {analyze.isPending ? (
+        {isAnalyzing ? (
           <div className="w-full max-w-2xl p-8 border border-border/50 rounded-xl bg-card/50 backdrop-blur-sm shadow-2xl">
             <AnimatedProgress query={query} />
           </div>
@@ -70,15 +101,15 @@ export function Home() {
                   className="border-0 bg-transparent h-14 text-lg focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-muted-foreground/50"
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
-                  disabled={analyze.isPending}
+                  disabled={isAnalyzing}
                 />
                 <Button 
                   type="submit" 
                   size="lg"
                   className="mr-2 px-8 h-10 font-medium"
-                  disabled={!query.trim() || analyze.isPending}
+                  disabled={!query.trim() || isAnalyzing}
                 >
-                  {analyze.isPending ? <Loader2 className="size-4 animate-spin" /> : "Analyze"}
+                  {isAnalyzing ? <Loader2 className="size-4 animate-spin" /> : "Analyze"}
                 </Button>
               </div>
             </form>
